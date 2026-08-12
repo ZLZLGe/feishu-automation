@@ -1,0 +1,8 @@
+{
+  "app_id": "cli_example",
+  "app_secret": "replace-locally",
+  "webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/replace-locally",
+  "base_url": "https://your-tenant.feishu.cn",
+  "default_folder_token": "",
+  "download_dir": "~/Documents/Feishu"
+}
