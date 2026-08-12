@@ -1,7 +1,7 @@
 interface:
   display_name: "Feishu Automation"
   short_description: "Automate Feishu docs, attachments, and webhook delivery"
-  default_prompt: "Use $feishu-automation to configure Feishu, work with a document, or send a webhook notification."
+  default_prompt: "Use $feishu-automation to guide me interactively through Feishu setup by opening the official pages, or help me work with documents and webhook notifications."
 
 policy:
   allow_implicit_invocation: true

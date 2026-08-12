@@ -1,10 +1,59 @@
-# Setup
+# Guided Setup
 
-## 1. Create the enterprise application
+Use this reference when the user has not yet created the Feishu credentials. Do not send the entire document as one checklist. Explain one stage, open the relevant page, and wait for the user to finish before proceeding.
 
-Create an enterprise custom application in the Feishu Open Platform. Copy its App ID and App Secret from Credentials & Basic Info.
+## What the two Feishu components are
 
-Enable the scopes needed by the operations you intend to use:
+The integration uses two independent Feishu components:
+
+- A **Feishu enterprise custom app** is an API identity owned by the user's organization. The local MCP exchanges its App ID and App Secret for an application token, then uses that token to call document, folder, attachment, Wiki, and permission APIs. The user does not need to build a web page, mini program, or interactive bot.
+- A **custom group robot** belongs to one target group and exposes a Webhook URL. It can receive outbound notifications from this project, but it cannot read or edit documents.
+
+The user may configure document automation without a Webhook only by manually leaving `webhook_url` out of the private configuration. The bundled interactive configurator currently expects both because it supports the full feature set.
+
+Never ask the user to paste App Secret or a complete Webhook URL into chat. Collect both through the configurator's hidden terminal prompts.
+
+## 1. Create an enterprise custom app
+
+Open the developer console:
+
+```text
+https://open.feishu.cn/app
+```
+
+Prefer a browser-control tool and navigate there directly. If browser control is unavailable, run:
+
+```bash
+python scripts/open_setup.py developer-console
+```
+
+Tell the user to:
+
+1. Sign in with the organization account that will own the integration.
+2. On the developer-console home page, select **创建企业自建应用**.
+3. Use a descriptive name such as `Codex Feishu Automation`, add a short description, select an icon, and click **创建**.
+
+If the creation button is missing or approval is required, an organization administrator may have restricted custom-app creation. Stop and ask the user to request access from the administrator.
+
+Wait until the user confirms the application detail page is open.
+
+## 2. Find Credentials & Basic Info
+
+In the application's left sidebar, open **凭证与基础信息** (Credentials & Basic Info).
+
+Explain that:
+
+- App ID identifies this application and usually starts with `cli_`.
+- App Secret authenticates the application and must remain private.
+- The user only needs to note both values locally. Do not ask them to send either secret through chat.
+
+Do not proceed until the user can see the credentials page.
+
+## 3. Enable Permissions & Scopes
+
+In the application's left sidebar, open **权限管理 > 开通权限**. Choose **应用身份权限** when the console distinguishes application and user identity.
+
+Enable the scopes required by the features the user wants:
 
 - `docx:document`: create, read, and edit DocX documents.
 - `docx:document.block:convert`: convert Markdown into DocX blocks.
@@ -12,21 +61,44 @@ Enable the scopes needed by the operations you intend to use:
 - `docs:document.media:upload`: upload images and attachments into documents.
 - `docs:document.media:download`: download document images and attachments.
 - `docs:permission.setting:write_only`: make generated report links readable inside the tenant.
-- `wiki:wiki:readonly` or the current node-read equivalent: resolve Wiki links when Wiki pages are used.
+- `wiki:wiki:readonly`, or the currently displayed equivalent for reading Wiki nodes: resolve Wiki links.
 
-Permission names may be displayed in Chinese in the console. Select the permission whose description matches the operation. Publish a new application version after adding scopes.
+Permission labels can differ between console versions. Search by scope identifier first, then confirm that the Chinese description matches the intended operation. Do not add broad unrelated permissions.
 
-The app can automatically use documents and folders that it created. Existing user-owned resources must also be inside the application's data-access scope.
+Wait until the user confirms the selected permissions are enabled.
 
-## 2. Add a custom webhook robot
+## 4. Complete Version Management & Release
 
-In the target group, add a custom robot and copy its Webhook URL. This Webhook is for outbound notification only and does not use the enterprise application's credentials.
+Open **应用发布 > 版本管理与发布** (Version Management & Release). Tell the user to create a version, include the newly requested scopes, submit it, and complete any administrator approval required by the organization.
 
-If the group robot requires keyword verification, make sure every generated message contains that keyword. The bundled sender currently supports URL-based Webhooks without timestamp/signature mode.
+An application may exist while its newly selected scopes remain ineffective. Permission changes take effect only after a version containing them is published and approved.
 
-## 3. Install and configure locally on macOS/Linux
+Wait until the user confirms the version is published or identifies an administrator-approval blocker.
 
-From the skill source directory:
+## 5. Add a custom robot under Group Bots
+
+Open the official guide with a browser tool or:
+
+```bash
+python scripts/open_setup.py webhook-guide
+```
+
+In the target Feishu group, guide the user through:
+
+1. Open **设置**.
+2. Select **群机器人** (Group Bots).
+3. Click **添加机器人**.
+4. Select **自定义机器人**.
+5. Set its name and description, then click **添加**.
+6. Copy the generated Webhook URL to a local temporary clipboard or password manager. Do not paste it into chat.
+
+If keyword verification is enabled, note the required keyword because every outgoing message must contain it. The bundled sender does not currently support timestamp/signature verification mode.
+
+Wait until the user confirms the robot exists and the Webhook URL is available locally.
+
+## 6. Install and configure locally on macOS/Linux
+
+From the repository root:
 
 ```bash
 python3 -m venv .venv
@@ -34,11 +106,11 @@ python3 -m venv .venv
 .venv/bin/python scripts/configure.py
 ```
 
-The configurator writes `~/.config/codex/feishu-automation/config.json` with mode `600` and registers the local MCP server as `feishu_automation`.
+The configurator requests App ID, hides App Secret and Webhook URL input, requests the Feishu tenant URL, writes `~/.config/codex/feishu-automation/config.json` with mode `600`, creates the download directory, and registers `feishu_automation` with Codex.
 
-## 4. Install and configure locally on Windows
+## 7. Install and configure locally on Windows
 
-Run these commands in PowerShell from the cloned repository:
+Run these commands in PowerShell from the repository root:
 
 ```powershell
 py -3.11 -m venv .venv
@@ -52,7 +124,7 @@ New-Item -ItemType Junction -Path $SkillPath -Target (Get-Location).Path
 & .\.venv\Scripts\python.exe .\scripts\configure.py
 ```
 
-Before running the configurator, confirm `codex --version` works in the same PowerShell session. The configurator writes `%USERPROFILE%\.config\codex\feishu-automation\config.json`, limits its Windows ACL to the current user, and registers the MCP server as `feishu_automation`.
+Before running the configurator, confirm `codex --version` works in the same PowerShell session. The configurator writes `%USERPROFILE%\.config\codex\feishu-automation\config.json`, limits its Windows ACL to the current user, and registers the MCP server.
 
 Configuration schema:
 
@@ -67,11 +139,13 @@ Configuration schema:
 }
 ```
 
-`base_url` is needed to form clickable links for newly created daily-report documents. Add it manually if the configurator did not receive it.
+## 8. Verify without external writes
 
-Restart Codex after MCP configuration changes.
+Restart Codex, then run:
 
-## 5. Verify without external writes
+```bash
+codex mcp get feishu_automation
+```
 
 macOS/Linux:
 
@@ -87,4 +161,4 @@ Windows PowerShell:
 & .\.venv\Scripts\python.exe .\scripts\send_webhook.py --message "Feishu setup test" --dry-run
 ```
 
-Only after user authorization, send a real webhook test and create a test document.
+Only after explicit authorization should Codex create a real test document or send a real group message. Existing user-owned documents and folders must also be inside the application's data-access scope.

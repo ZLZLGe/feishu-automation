@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import urlparse
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -100,6 +101,82 @@ class PlatformSupportTests(unittest.TestCase):
                 self.platform.require_private_file(path, platform_name="nt")
             self.platform.secure_private_file(path, platform_name="nt")
             self.platform.require_private_file(path, platform_name="nt")
+
+
+class SetupOpenerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        opener_path = ROOT / "scripts" / "open_setup.py"
+        self.assertTrue(
+            opener_path.exists(),
+            "Guided setup requires scripts/open_setup.py",
+        )
+        self.opener = load_module(
+            "feishu_setup_opener_for_test", "scripts/open_setup.py"
+        )
+
+    def test_exposes_only_official_feishu_setup_pages(self) -> None:
+        self.assertEqual(
+            set(self.opener.SETUP_PAGES),
+            {"developer-console", "app-guide", "webhook-guide"},
+        )
+        for url in self.opener.SETUP_PAGES.values():
+            parsed = urlparse(url)
+            self.assertEqual(parsed.scheme, "https")
+            self.assertEqual(parsed.hostname, "open.feishu.cn")
+
+    def test_opens_requested_setup_page(self) -> None:
+        opened: list[str] = []
+        url = self.opener.open_setup_page(
+            "developer-console",
+            opener=lambda target: opened.append(target) or True,
+        )
+        self.assertEqual(opened, [url])
+        self.assertEqual(url, self.opener.SETUP_PAGES["developer-console"])
+
+    def test_rejects_unknown_setup_page(self) -> None:
+        with self.assertRaises(self.opener.SetupOpenError):
+            self.opener.open_setup_page("credentials")
+
+
+class SkillGuidanceTests(unittest.TestCase):
+    def test_first_time_setup_is_interactive_and_secret_safe(self) -> None:
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        frontmatter = skill.split("---", 2)[1]
+        self.assertIn("first-time Feishu setup", frontmatter)
+        self.assertIn("enterprise custom app", frontmatter)
+        required_instructions = (
+            "## Guided first-time setup",
+            "Do not merely give the user a static checklist",
+            "https://open.feishu.cn/app",
+            "scripts/open_setup.py developer-console",
+            "App Secret",
+            "Webhook URL",
+            "never ask the user to paste",
+            "Wait for the user",
+            "relative to this Skill directory",
+        )
+        for instruction in required_instructions:
+            self.assertIn(instruction, skill)
+
+    def test_user_docs_start_with_guided_setup(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        setup = (ROOT / "references" / "setup.md").read_text(encoding="utf-8")
+        for instruction in (
+            "让 Codex 引导配置",
+            "创建企业自建应用",
+            "python scripts/open_setup.py developer-console",
+            "不要把 App Secret 或完整 Webhook URL 发到聊天里",
+        ):
+            self.assertIn(instruction, readme)
+        for instruction in (
+            "What the two Feishu components are",
+            "https://open.feishu.cn/app",
+            "Credentials & Basic Info",
+            "Permissions & Scopes",
+            "Version Management & Release",
+            "Group Bots",
+        ):
+            self.assertIn(instruction, setup)
 
 
 class DocumentClientTests(unittest.TestCase):

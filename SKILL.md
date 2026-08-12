@@ -1,6 +1,6 @@
 ---
 name: feishu-automation
-description: Use when configuring Feishu Open Platform for Codex, creating or editing Feishu Wiki/DocX documents, handling document attachments, or sending proactive group notifications through a Feishu custom-bot webhook.
+description: Use when doing first-time Feishu setup, explaining or creating an enterprise custom app or group Webhook, configuring Feishu Open Platform for Codex, working with Feishu Wiki/DocX documents or attachments, or sending proactive group notifications.
 ---
 
 # Feishu Automation
@@ -9,11 +9,29 @@ Use the bundled MCP server for document operations and the custom-bot webhook fo
 
 ## Select the path
 
-- First-time setup or permission errors: read `references/setup.md`, then run `scripts/configure.py`.
+- First-time setup, missing credentials, or questions such as "what is a Feishu custom app?": follow **Guided first-time setup** below. Do not jump directly to `scripts/configure.py`.
+- Permission errors after setup: read `references/setup.md` and `references/troubleshooting.md`.
 - Create, read, or edit a document: use the `feishu_automation` MCP tools. Read before changing existing content.
 - Upload or download a document attachment: use the attachment MCP tools; downloads default to `~/Documents/Feishu`.
 - Push a fixed-group notification: use `send_feishu_webhook` or `scripts/send_webhook.py`.
 - Publish a Markdown daily report: read `references/daily-ai-report.md` and use `scripts/publish_daily_report.py`.
+
+## Guided first-time setup
+
+Do not merely give the user a static checklist. Explain each concept, proactively open the relevant official page, state the exact clicks to make, and Wait for the user to confirm completion before advancing to the next stage. Login, secret viewing, permission approval, and publishing remain user-controlled actions.
+
+Resolve all `scripts/...` and `references/...` paths relative to this Skill directory, not the user's current working directory.
+
+1. Explain the two independent identities before asking for any value:
+   - A **Feishu enterprise custom app** is the local MCP server's API identity. Its App ID and App Secret let the MCP request document, folder, permission, and attachment APIs. The user does not need to build a web app or mini program.
+   - A **custom group robot Webhook** can only push messages into the one group where it was added. It cannot read or edit documents and does not replace the enterprise app.
+2. Open the developer console immediately at `https://open.feishu.cn/app`. Prefer a connected browser-control tool and actually open the page rather than only returning a link. If browser control is unavailable, run `python scripts/open_setup.py developer-console`. Tell the user to sign in, click **创建企业自建应用**, enter a name such as `Codex Feishu Automation`, and click **创建**. Wait for the user to say the application exists.
+3. Tell the user to open **凭证与基础信息** in the new application's sidebar. Explain where App ID and App Secret are located, but never ask the user to paste an App Secret or full Webhook URL into chat. The values will be entered privately in the terminal during the final configuration step.
+4. Tell the user to open **权限管理 > 开通权限**, select **应用身份权限**, and enable the scopes listed in `references/setup.md`. Explain that document creation, Markdown conversion, folders, attachments, sharing, and Wiki access require different scopes. Wait for the user to confirm the required scopes are enabled.
+5. Tell the user to open **版本管理与发布**, create a version, submit it, and complete any administrator approval. Explain that newly added scopes do not become effective until a version containing them is published. Wait for publication confirmation.
+6. Open the official custom-robot guide with a browser tool or `python scripts/open_setup.py webhook-guide`. Guide the user in the target group through **设置 > 群机器人 > 添加机器人 > 自定义机器人**. Have the user copy the generated Webhook URL privately and finish any keyword rule. Wait for confirmation.
+7. Only after both parts are ready, run the platform-specific `scripts/configure.py` command from `references/setup.md`. App Secret and Webhook URL use hidden terminal input. Do not echo them, add them to command-line arguments, store them in prompts, or commit them.
+8. Ask the user to restart Codex, check `codex mcp get feishu_automation`, run a Webhook dry run, and request authorization before creating a real document or sending a real group message.
 
 ## Document workflow
 

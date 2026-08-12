@@ -37,14 +37,47 @@ Codex
 
 企业应用的 `App ID`、`App Secret` 用于文档 API；自定义机器人的 `webhook_url` 只用于群消息推送，两者互不替代。
 
+## 让 Codex 引导配置
+
+安装 Skill 后，推荐直接在 Codex 中输入：
+
+```text
+使用 $feishu-automation 带我从零配置飞书。请先解释需要创建什么，然后主动打开相应的飞书官方页面，每完成一步再带我做下一步。
+```
+
+Codex 应当先解释“企业自建应用”和“自定义机器人 Webhook”的区别，然后主动打开飞书开发者后台，引导你完成以下过程：
+
+1. 点击 **创建企业自建应用**，创建一个仅供当前企业使用的 API 身份。
+2. 在 **凭证与基础信息** 找到 App ID 和 App Secret。
+3. 在 **权限管理** 开通文档、文件夹、附件和分享相关权限。
+4. 在 **版本管理与发布** 创建并发布新版本，使权限生效。
+5. 在目标群的 **设置 > 群机器人 > 添加机器人 > 自定义机器人** 创建 Webhook。
+6. 最后在本地终端运行配置脚本，隐藏输入密钥并注册 MCP。
+
+不要把 App Secret 或完整 Webhook URL 发到聊天里，也不要把它们直接写在带参数的终端命令中。配置脚本会使用隐藏输入并保存到本机私密配置文件。
+
+如果 Codex 无法控制浏览器，可从仓库根目录运行：
+
+```bash
+python scripts/open_setup.py developer-console
+```
+
+Windows PowerShell 可运行：
+
+```powershell
+& .\.venv\Scripts\python.exe .\scripts\open_setup.py developer-console
+```
+
+完整逐步说明见 [`references/setup.md`](references/setup.md)。
+
 ## 前置条件
 
 - Windows 10/11、macOS 或 Linux。
 - Python 3.11 及以上版本。
 - Codex Desktop 或 Codex CLI；配置时应确保 `codex --version` 可以在终端运行。
 - Windows 原生安装需要 PowerShell 5.1 或 PowerShell 7。
-- 一个飞书企业自建应用。
-- 一个已加入目标群的飞书自定义机器人。
+- 能够登录飞书开放平台并创建企业自建应用；首次使用时可由 Skill 逐步引导。
+- 能够在目标群添加自定义机器人；首次使用时可由 Skill 逐步引导。
 
 飞书应用按需开通以下权限，并在修改权限后发布新的应用版本：
 
@@ -307,6 +340,7 @@ feishu-automation/
 ├── scripts/
 │   ├── configure.py
 │   ├── feishu_mcp_server.py
+│   ├── open_setup.py
 │   ├── platform_support.py
 │   ├── publish_daily_report.py
 │   └── send_webhook.py
