@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from mcp.server import MCPServer
+from platform_support import PrivateFileError, require_private_file
 
 
 API_BASE = "https://open.feishu.cn/open-apis"
@@ -51,6 +52,10 @@ def config_path() -> Path:
 
 def load_credentials() -> tuple[str, str]:
     path = config_path()
+    try:
+        require_private_file(path)
+    except PrivateFileError as error:
+        raise FeishuReaderError(str(error)) from error
     try:
         config = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as error:

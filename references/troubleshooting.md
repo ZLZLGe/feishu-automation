@@ -24,6 +24,14 @@ Creation under an application identity does not automatically grant every user a
 
 ## MCP tools do not appear
 
-- Confirm `.venv/bin/python` exists and dependencies are installed.
+- Confirm `.venv/bin/python` exists on macOS/Linux or `.venv\Scripts\python.exe` exists on Windows.
+- Confirm `codex --version` works in the terminal used to run `configure.py`.
 - Run `codex mcp get feishu_automation`.
 - Restart Codex after adding or changing the MCP entry.
+
+## Windows credential ACL error
+
+- Run `scripts\configure.py` with the same Windows account that runs Codex.
+- Do not move `config.json` to a shared or network directory after configuration.
+- If the file was copied or restored, rerun `configure.py`; it will replace inherited permissions with a current-user-only ACL.
+- PowerShell 5.1 or PowerShell 7 must be available so the configurator can set and verify the ACL.

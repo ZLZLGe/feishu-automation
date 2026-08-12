@@ -7,12 +7,12 @@ import argparse
 import json
 import os
 import re
-import stat
 import sys
 from pathlib import Path
 from typing import Any, Callable
 
 from feishu_mcp_server import FeishuClient
+from platform_support import PrivateFileError, require_private_file
 from send_webhook import build_payload, send_payload, validate_webhook_url
 
 
@@ -30,11 +30,9 @@ def config_path() -> Path:
 def load_config() -> dict[str, Any]:
     path = config_path()
     try:
-        mode = stat.S_IMODE(path.stat().st_mode)
-    except FileNotFoundError as error:
-        raise DailyReportError(f"Feishu config does not exist: {path}") from error
-    if mode & 0o077:
-        raise DailyReportError(f"Feishu config must have permission 600: {path}")
+        require_private_file(path)
+    except PrivateFileError as error:
+        raise DailyReportError(str(error)) from error
     try:
         config = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:

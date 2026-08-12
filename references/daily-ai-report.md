@@ -27,6 +27,14 @@ Publish an existing Markdown file:
   --file examples/daily-ai-report/report-template.md
 ```
 
+On Windows PowerShell:
+
+```powershell
+& .\.venv\Scripts\python.exe .\scripts\publish_daily_report.py `
+  --title "AI 前沿热点日报 2026-08-12" `
+  --file .\examples\daily-ai-report\report-template.md
+```
+
 The script creates a new document, writes the complete Markdown, extracts up to three entries from `今日速览`, and sends those entries plus the document link through the configured Webhook.
 
 Use Codex automation, `launchd`, or cron only when scheduling is requested. Scheduling is separate from this Skill's Feishu integration.

@@ -46,6 +46,47 @@ class RecordingClient:
         }
 
 
+class PlatformSupportTests(unittest.TestCase):
+    def setUp(self) -> None:
+        support_path = ROOT / "scripts" / "platform_support.py"
+        self.assertTrue(
+            support_path.exists(),
+            "Windows support requires scripts/platform_support.py",
+        )
+        self.platform = load_module(
+            "feishu_platform_support_for_test", "scripts/platform_support.py"
+        )
+
+    def test_selects_platform_specific_virtualenv_python(self) -> None:
+        root = Path("/work/feishu-automation")
+        self.assertEqual(
+            self.platform.venv_python_path(root, platform_name="nt"),
+            root / ".venv" / "Scripts" / "python.exe",
+        )
+        self.assertEqual(
+            self.platform.venv_python_path(root, platform_name="posix"),
+            root / ".venv" / "bin" / "python",
+        )
+
+    def test_posix_private_file_rejects_group_or_world_access(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            path.write_text("{}", encoding="utf-8")
+            os.chmod(path, 0o644)
+            with self.assertRaises(self.platform.PrivateFileError):
+                self.platform.require_private_file(path, platform_name="posix")
+
+    @unittest.skipUnless(os.name == "nt", "Windows ACL test")
+    def test_windows_private_file_acl_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            path.write_text("{}", encoding="utf-8")
+            with self.assertRaises(self.platform.PrivateFileError):
+                self.platform.require_private_file(path, platform_name="nt")
+            self.platform.secure_private_file(path, platform_name="nt")
+            self.platform.require_private_file(path, platform_name="nt")
+
+
 class DocumentClientTests(unittest.TestCase):
     def setUp(self) -> None:
         self.server = load_module("feishu_server_for_test", "scripts/feishu_mcp_server.py")
@@ -159,6 +200,9 @@ def client_module(module, client):
 class WebhookTests(unittest.TestCase):
     def setUp(self) -> None:
         self.webhook = load_module("feishu_webhook_for_test", "scripts/send_webhook.py")
+        self.platform = load_module(
+            "feishu_platform_support_webhook_test", "scripts/platform_support.py"
+        )
 
     def test_loads_webhook_from_private_config(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -167,7 +211,7 @@ class WebhookTests(unittest.TestCase):
                 json.dumps({"webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/test"}),
                 encoding="utf-8",
             )
-            os.chmod(config_path, 0o600)
+            self.platform.secure_private_file(config_path)
             self.assertEqual(
                 self.webhook.load_webhook_url(config_path),
                 "https://open.feishu.cn/open-apis/bot/v2/hook/test",
@@ -180,9 +224,10 @@ class WebhookTests(unittest.TestCase):
                 json.dumps({"webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/test"}),
                 encoding="utf-8",
             )
-            os.chmod(config_path, 0o644)
-            mode = stat.S_IMODE(config_path.stat().st_mode)
-            self.assertEqual(mode, 0o644)
+            if os.name != "nt":
+                os.chmod(config_path, 0o644)
+                mode = stat.S_IMODE(config_path.stat().st_mode)
+                self.assertEqual(mode, 0o644)
             with self.assertRaises(self.webhook.WebhookError):
                 self.webhook.load_webhook_url(config_path)
 
@@ -216,6 +261,9 @@ class WebhookTests(unittest.TestCase):
 class ConfigureTests(unittest.TestCase):
     def setUp(self) -> None:
         self.configure = load_module("feishu_configure_for_test", "scripts/configure.py")
+        self.platform = load_module(
+            "feishu_platform_support_configure_test", "scripts/platform_support.py"
+        )
 
     def test_save_config_uses_owner_only_permissions(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -229,7 +277,9 @@ class ConfigureTests(unittest.TestCase):
                     "download_dir": str(Path.home() / "Documents" / "Feishu"),
                 },
             )
-            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            self.platform.require_private_file(path)
+            if os.name != "nt":
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
 
     def test_validates_tenant_base_url(self) -> None:
         self.assertEqual(
@@ -238,6 +288,40 @@ class ConfigureTests(unittest.TestCase):
         )
         with self.assertRaises(self.configure.ConfigureError):
             self.configure.validate_base_url("https://example.com")
+
+    def test_registers_mcp_with_windows_virtualenv_python(self) -> None:
+        register_mcp = getattr(self.configure, "register_mcp", None)
+        self.assertIsNotNone(register_mcp)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            python = root / ".venv" / "Scripts" / "python.exe"
+            server = root / "scripts" / "feishu_mcp_server.py"
+            codex = root / "codex.exe"
+            python.parent.mkdir(parents=True)
+            server.parent.mkdir(parents=True)
+            python.touch()
+            server.touch()
+            codex.touch()
+            with patch.object(self.configure.subprocess, "run") as run:
+                register_mcp(
+                    root=root,
+                    platform_name="nt",
+                    codex_executable=codex,
+                )
+
+        add_call = run.call_args_list[1]
+        self.assertEqual(
+            add_call.args[0],
+            [
+                str(codex),
+                "mcp",
+                "add",
+                "feishu_automation",
+                "--",
+                str(python),
+                str(server),
+            ],
+        )
 
 
 class MCPProtocolTests(unittest.IsolatedAsyncioTestCase):

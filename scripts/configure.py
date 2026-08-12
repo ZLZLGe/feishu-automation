@@ -14,11 +14,12 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
+from platform_support import PrivateFileError, secure_private_file, venv_python_path
+
 
 DEFAULT_CONFIG = Path("~/.config/codex/feishu-automation/config.json").expanduser()
 DEFAULT_DOWNLOAD_DIR = Path("~/Documents/Feishu").expanduser()
 ROOT = Path(__file__).resolve().parents[1]
-VENV_PYTHON = ROOT / ".venv" / "bin" / "python"
 SERVER = ROOT / "scripts" / "feishu_mcp_server.py"
 
 
@@ -36,8 +37,9 @@ def save_config(path: Path, config: dict[str, Any]) -> None:
             json.dumps(config, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
-        os.chmod(temporary, 0o600)
+        secure_private_file(temporary)
         temporary.replace(path)
+        secure_private_file(path)
     finally:
         os.umask(old_umask)
 
@@ -55,13 +57,33 @@ def validate_base_url(value: str) -> str:
     return url
 
 
-def register_mcp() -> None:
+def register_mcp(
+    *,
+    root: Path = ROOT,
+    platform_name: str | None = None,
+    codex_executable: Path | str | None = None,
+) -> None:
+    platform_name = platform_name or os.name
     app_codex = Path("/Applications/ChatGPT.app/Contents/Resources/codex")
-    codex = str(app_codex) if app_codex.exists() else shutil.which("codex")
+    if codex_executable is not None:
+        codex = str(codex_executable)
+    elif platform_name != "nt" and app_codex.exists():
+        codex = str(app_codex)
+    else:
+        codex = shutil.which("codex.exe") or shutil.which("codex")
     if not codex:
-        raise ConfigureError("Codex executable was not found.")
-    if not VENV_PYTHON.exists():
-        raise ConfigureError("Install dependencies first: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt")
+        raise ConfigureError(
+            "Codex executable was not found. Install Codex CLI and ensure codex is on PATH."
+        )
+    venv_python = venv_python_path(root, platform_name)
+    server = root / "scripts" / "feishu_mcp_server.py"
+    if not venv_python.exists():
+        raise ConfigureError(
+            f"Virtual environment Python was not found: {venv_python}. "
+            "Create .venv and install requirements first."
+        )
+    if not server.exists():
+        raise ConfigureError(f"MCP server was not found: {server}")
     subprocess.run([codex, "mcp", "remove", "feishu_automation"], check=False)
     subprocess.run(
         [
@@ -70,10 +92,10 @@ def register_mcp() -> None:
             "add",
             "feishu_automation",
             "--",
-            str(VENV_PYTHON),
-            str(SERVER),
+            str(venv_python),
+            str(server),
         ],
-        cwd=ROOT,
+        cwd=root,
         check=True,
     )
 
@@ -110,7 +132,12 @@ def main() -> int:
             register_mcp()
         print(f"Configuration written to {DEFAULT_CONFIG}")
         return 0
-    except (ConfigureError, OSError, subprocess.CalledProcessError) as error:
+    except (
+        ConfigureError,
+        PrivateFileError,
+        OSError,
+        subprocess.CalledProcessError,
+    ) as error:
         print(f"configure.py: {error}", file=sys.stderr)
         return 1
 

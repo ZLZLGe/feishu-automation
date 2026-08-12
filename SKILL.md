@@ -39,7 +39,7 @@ Run with `--dry-run` before changing a message template. Do not send test messag
 
 ## Configuration rules
 
-- Private config: `~/.config/codex/feishu-automation/config.json`, mode `600`.
+- Private config: `~/.config/codex/feishu-automation/config.json`; use mode `600` on macOS/Linux and a current-user-only ACL on Windows.
 - Download directory: `~/Documents/Feishu`.
 - Codex MCP name: `feishu_automation`.
 - Store examples with placeholders only. Never commit `app_secret`, access tokens, or complete webhook URLs.

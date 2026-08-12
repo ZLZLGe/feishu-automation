@@ -6,13 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import stat
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
+
+from platform_support import PrivateFileError, require_private_file
 
 
 DEFAULT_CONFIG = Path("~/.config/codex/feishu-automation/config.json").expanduser()
@@ -41,11 +42,9 @@ def validate_webhook_url(value: str) -> str:
 def load_webhook_url(path: Path | None = None) -> str:
     path = (path or config_path()).expanduser()
     try:
-        mode = stat.S_IMODE(path.stat().st_mode)
-    except FileNotFoundError as error:
-        raise WebhookError(f"Feishu config does not exist: {path}") from error
-    if mode & 0o077:
-        raise WebhookError(f"Feishu config must have permission 600: {path}")
+        require_private_file(path)
+    except PrivateFileError as error:
+        raise WebhookError(str(error)) from error
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:

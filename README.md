@@ -39,9 +39,10 @@ Codex
 
 ## 前置条件
 
-- macOS 或 Linux。
+- Windows 10/11、macOS 或 Linux。
 - Python 3.11 及以上版本。
-- Codex Desktop 或 Codex CLI。
+- Codex Desktop 或 Codex CLI；配置时应确保 `codex --version` 可以在终端运行。
+- Windows 原生安装需要 PowerShell 5.1 或 PowerShell 7。
 - 一个飞书企业自建应用。
 - 一个已加入目标群的飞书自定义机器人。
 
@@ -56,7 +57,7 @@ Codex
 
 权限名称和配置细节见 [`references/setup.md`](references/setup.md)。已有文档或文件夹还必须位于应用可访问的数据范围内。
 
-## 安装
+## 安装（macOS/Linux）
 
 ```bash
 git clone https://github.com/ZLZLGe/feishu-automation.git
@@ -79,12 +80,43 @@ ln -s "$PWD" ~/.codex/skills/feishu-automation
 readlink ~/.codex/skills/feishu-automation
 ```
 
+## 安装（Windows PowerShell）
+
+```powershell
+git clone https://github.com/ZLZLGe/feishu-automation.git
+Set-Location feishu-automation
+
+py -3.11 -m venv .venv
+& .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+将仓库注册为本地 Codex Skill。目录联接不要求开启 Windows 开发者模式：
+
+```powershell
+$SkillRoot = Join-Path $HOME ".codex\skills"
+$SkillPath = Join-Path $SkillRoot "feishu-automation"
+New-Item -ItemType Directory -Force -Path $SkillRoot | Out-Null
+New-Item -ItemType Junction -Path $SkillPath -Target (Get-Location).Path
+```
+
+如果 `$SkillPath` 已经存在，不要覆盖。用下面的命令检查其目标：
+
+```powershell
+(Get-Item $SkillPath).Target
+```
+
 ## 配置
 
-运行交互式配置：
+macOS/Linux：
 
 ```bash
 .venv/bin/python scripts/configure.py
+```
+
+Windows PowerShell：
+
+```powershell
+& .\.venv\Scripts\python.exe .\scripts\configure.py
 ```
 
 依次输入：
@@ -97,7 +129,7 @@ readlink ~/.codex/skills/feishu-automation
 配置脚本会：
 
 - 将凭据保存到 `~/.config/codex/feishu-automation/config.json`。
-- 将配置文件权限设置为 `600`。
+- macOS/Linux 将配置文件权限设置为 `600`；Windows 将 ACL 限制为当前用户。
 - 创建默认下载目录 `~/Documents/Feishu`。
 - 将 MCP Server 注册为 `feishu_automation`。
 
@@ -157,12 +189,20 @@ codex mcp get feishu_automation
 - 第三条重点。
 ```
 
-发布日报：
+发布日报。macOS/Linux：
 
 ```bash
 .venv/bin/python scripts/publish_daily_report.py \
   --title "AI 前沿热点日报 2026-08-12" \
   --file examples/daily-ai-report/report-template.md
+```
+
+Windows PowerShell：
+
+```powershell
+& .\.venv\Scripts\python.exe .\scripts\publish_daily_report.py `
+  --title "AI 前沿热点日报 2026-08-12" `
+  --file .\examples\daily-ai-report\report-template.md
 ```
 
 执行顺序是：创建 DocX、写入完整 Markdown、设置组织内链接可读、提取三条摘要、通过 Webhook 推送摘要和全文链接。该命令会产生真实的飞书写入和群消息。
@@ -171,11 +211,19 @@ codex mcp get feishu_automation
 
 ## 单独发送 Webhook
 
-先检查消息结构，不实际发送：
+先检查消息结构，不实际发送。macOS/Linux：
 
 ```bash
 .venv/bin/python scripts/send_webhook.py \
   --message "任务已完成" \
+  --dry-run
+```
+
+Windows PowerShell：
+
+```powershell
+& .\.venv\Scripts\python.exe .\scripts\send_webhook.py `
+  --message "任务已完成" `
   --dry-run
 ```
 
@@ -189,34 +237,59 @@ codex mcp get feishu_automation
   --link-text "查看结果"
 ```
 
+Windows PowerShell：
+
+```powershell
+& .\.venv\Scripts\python.exe .\scripts\send_webhook.py `
+  --title "任务完成" `
+  --message "结果文档已经生成。" `
+  --link-url "https://example.feishu.cn/docx/..." `
+  --link-text "查看结果"
+```
+
 当前发送器支持 URL 型自定义机器人 Webhook，不支持时间戳/签名校验模式。如果机器人启用了关键词校验，消息中必须包含配置的关键词。
 
 ## 本地数据与密钥
 
 | 路径 | 内容 |
 | --- | --- |
-| `~/.config/codex/feishu-automation/config.json` | App ID、App Secret、Webhook 和默认目录配置 |
+| `~/.config/codex/feishu-automation/config.json` | App ID、App Secret、Webhook 和默认目录配置；Windows 中 `~` 是 `%USERPROFILE%` |
 | `~/Documents/Feishu` | 默认附件下载目录 |
-| `~/.codex/skills/feishu-automation` | 指向本仓库的 Skill 软链接 |
+| `~/.codex/skills/feishu-automation` | 指向本仓库的 Skill 软链接或 Windows 目录联接 |
 | `~/.codex/config.toml` | Codex MCP 注册信息，不保存飞书密钥 |
 
 不要将真实配置文件、访问令牌或完整 Webhook URL提交到 Git。仓库中的 [`assets/config.example.json`](assets/config.example.json) 只有占位值。
 
 ## 验证
 
-运行离线测试：
+运行离线测试。macOS/Linux：
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-验证 Skill 结构：
+Windows PowerShell：
+
+```powershell
+& .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+验证 Skill 结构。macOS/Linux：
 
 ```bash
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py .
 ```
 
+Windows PowerShell：
+
+```powershell
+$Validator = Join-Path $HOME ".codex\skills\.system\skill-creator\scripts\quick_validate.py"
+& .\.venv\Scripts\python.exe $Validator .
+```
+
 当前测试覆盖配置文件权限、DocX 创建、文件夹、附件流程、文档权限、Webhook 载荷、日报组合流程和 MCP 工具清单。
+
+GitHub Actions 会在 Windows、macOS 和 Linux 上运行同一套测试。Windows Runner 还会真实验证配置文件的当前用户专用 ACL。
 
 遇到权限、Wiki 解析、文档链接或 MCP 加载问题时，查看 [`references/troubleshooting.md`](references/troubleshooting.md)。
 
@@ -233,6 +306,7 @@ feishu-automation/
 ├── scripts/
 │   ├── configure.py
 │   ├── feishu_mcp_server.py
+│   ├── platform_support.py
 │   ├── publish_daily_report.py
 │   └── send_webhook.py
 └── tests/test_feishu_automation.py
