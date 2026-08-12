@@ -297,6 +297,7 @@ GitHub Actions 会在 Windows、macOS 和 Linux 上运行同一套测试。Windo
 
 ```text
 feishu-automation/
+├── LICENSE
 ├── README.md
 ├── SKILL.md
 ├── agents/openai.yaml
@@ -314,4 +315,4 @@ feishu-automation/
 
 ## License
 
-本仓库目前未声明开源许可证。如需复用、分发或集成到其他项目，请先联系仓库所有者。
+本项目采用 [MIT License](LICENSE) 开源。你可以使用、复制、修改、合并、发布和分发本项目，但需保留原始版权声明和许可证文本。
