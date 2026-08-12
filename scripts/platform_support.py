@@ -53,10 +53,10 @@ def require_private_file(path: Path, platform_name: str | None = None) -> None:
 
 def _powershell_executable() -> str:
     executable = (
-        shutil.which("powershell.exe")
-        or shutil.which("powershell")
-        or shutil.which("pwsh.exe")
+        shutil.which("pwsh.exe")
         or shutil.which("pwsh")
+        or shutil.which("powershell.exe")
+        or shutil.which("powershell")
     )
     if not executable:
         raise PrivateFileError(

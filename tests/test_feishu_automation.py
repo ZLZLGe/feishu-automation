@@ -76,6 +76,21 @@ class PlatformSupportTests(unittest.TestCase):
             with self.assertRaises(self.platform.PrivateFileError):
                 self.platform.require_private_file(path, platform_name="posix")
 
+    def test_prefers_powershell_7_for_windows_acl_operations(self) -> None:
+        locations = {
+            "pwsh.exe": "C:/Program Files/PowerShell/7/pwsh.exe",
+            "powershell.exe": "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+        }
+        with patch.object(
+            self.platform.shutil,
+            "which",
+            side_effect=lambda name: locations.get(name),
+        ):
+            self.assertEqual(
+                self.platform._powershell_executable(),
+                locations["pwsh.exe"],
+            )
+
     @unittest.skipUnless(os.name == "nt", "Windows ACL test")
     def test_windows_private_file_acl_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
