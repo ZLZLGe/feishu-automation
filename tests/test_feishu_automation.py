@@ -188,6 +188,35 @@ class SkillGuidanceTests(unittest.TestCase):
         ):
             self.assertIn(instruction, setup)
 
+    def test_skill_requires_edit_access_before_document_changes(self) -> None:
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        setup = (ROOT / "references" / "setup.md").read_text(encoding="utf-8")
+        troubleshooting = (
+            ROOT / "references" / "troubleshooting.md"
+        ).read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        for content in (skill, setup, troubleshooting, readme):
+            self.assertIn("可编辑", content)
+            self.assertIn("可阅读", content)
+        self.assertIn("application as a collaborator", skill)
+        self.assertIn("91403", troubleshooting)
+
+    def test_skill_routes_final_reply_notifications_to_reference(self) -> None:
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        reference = (
+            ROOT / "references" / "codex-final-reply-notify.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("references/codex-final-reply-notify.md", skill)
+        self.assertIn("agent-turn-complete", reference)
+        self.assertIn("last-assistant-message", reference)
+        self.assertIn("user-level", reference)
+        self.assertIn("previous notifier", reference)
+        self.assertIn("no local log", reference)
+        self.assertIn("每轮最终回复自动通知", readme)
+        self.assertIn("scripts/codex_notify_feishu.py", readme)
+        self.assertIn("只转发每轮结束后的最终回复", readme)
+
 
 class DocumentClientTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -358,6 +387,129 @@ class WebhookTests(unittest.TestCase):
         self.assertEqual(result["code"], 0)
         request = call.call_args.args[0]
         self.assertEqual(request.method, "POST")
+
+
+class CodexFinalReplyNotifyTests(unittest.TestCase):
+    def setUp(self) -> None:
+        script = ROOT / "scripts" / "codex_notify_feishu.py"
+        self.assertTrue(script.exists(), "Final-reply notification adapter is required")
+        self.notify = load_module(
+            "feishu_codex_notify_for_test", "scripts/codex_notify_feishu.py"
+        )
+
+    @staticmethod
+    def event(**overrides: object) -> dict[str, object]:
+        event: dict[str, object] = {
+            "type": "agent-turn-complete",
+            "thread-id": "thread-1",
+            "turn-id": "turn-1",
+            "cwd": "/work/trajectory-pipeline",
+            "input-messages": ["Do the work"],
+            "last-assistant-message": "The task is complete.",
+        }
+        event.update(overrides)
+        return event
+
+    def test_builds_payload_from_only_the_final_assistant_reply(self) -> None:
+        payload = self.notify.build_notification_payload(self.event())
+        self.assertIsNotNone(payload)
+        text = payload["content"]["text"]
+        self.assertIn("trajectory-pipeline", text)
+        self.assertIn("The task is complete.", text)
+        self.assertNotIn("Do the work", text)
+        self.assertNotIn("thread-1", text)
+
+    def test_ignores_non_final_events_and_empty_replies(self) -> None:
+        self.assertIsNone(
+            self.notify.build_notification_payload(
+                self.event(type="approval-requested")
+            )
+        )
+        self.assertIsNone(
+            self.notify.build_notification_payload(
+                self.event(**{"last-assistant-message": "   "})
+            )
+        )
+
+    def test_truncates_long_replies_with_an_explicit_marker(self) -> None:
+        payload = self.notify.build_notification_payload(
+            self.event(**{"last-assistant-message": "x" * 30_000})
+        )
+        self.assertIsNotNone(payload)
+        text = payload["content"]["text"]
+        self.assertLessEqual(len(text), self.notify.MAX_NOTIFICATION_CHARS)
+        self.assertTrue(text.endswith("[消息过长，已截断]"))
+
+    def test_dispatch_loads_private_webhook_and_sends_once(self) -> None:
+        delivered: list[tuple[str, dict[str, object]]] = []
+
+        result = self.notify.dispatch_event(
+            json.dumps(self.event()),
+            webhook_loader=lambda: "https://open.feishu.cn/open-apis/bot/v2/hook/test",
+            sender=lambda url, payload: delivered.append((url, payload))
+            or {"code": 0},
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(len(delivered), 1)
+        self.assertEqual(
+            delivered[0][0],
+            "https://open.feishu.cn/open-apis/bot/v2/hook/test",
+        )
+
+    def test_delivery_failure_is_silent_and_does_not_write_logs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            before = set(Path(directory).iterdir())
+            output = io.StringIO()
+            errors = io.StringIO()
+            with (
+                patch.object(self.notify, "DEFAULT_CONFIG", Path(directory) / "missing.json"),
+                contextlib.redirect_stdout(output),
+                contextlib.redirect_stderr(errors),
+            ):
+                self.assertEqual(
+                    self.notify.main([json.dumps(self.event())]),
+                    0,
+                )
+            after = set(Path(directory).iterdir())
+
+        self.assertEqual(before, after)
+        self.assertEqual(output.getvalue(), "")
+        self.assertEqual(errors.getvalue(), "")
+
+    def test_dry_run_prints_payload_without_loading_webhook(self) -> None:
+        output = io.StringIO()
+        with (
+            patch.object(
+                self.notify,
+                "load_webhook_url",
+                side_effect=AssertionError("dry-run must not load the webhook"),
+            ),
+            contextlib.redirect_stdout(output),
+        ):
+            self.assertEqual(
+                self.notify.main([
+                    "--dry-run",
+                    json.dumps(self.event()),
+                ]),
+                0,
+            )
+
+        payload = json.loads(output.getvalue())
+        self.assertIn("The task is complete.", payload["content"]["text"])
+
+    def test_forwards_raw_event_to_a_previous_notifier(self) -> None:
+        calls: list[list[str]] = []
+        raw_event = json.dumps(self.event())
+        self.notify.forward_previous_notifier(
+            ["existing-notifier", "fixed-argument"],
+            raw_event,
+            runner=lambda command, **_kwargs: calls.append(command),
+        )
+        self.assertEqual(
+            calls,
+            [["existing-notifier", "fixed-argument", raw_event]],
+        )
 
 
 class ConfigureTests(unittest.TestCase):

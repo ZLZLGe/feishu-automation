@@ -1,7 +1,7 @@
 interface:
   display_name: "Feishu Automation"
-  short_description: "Automate Feishu docs, attachments, and webhook delivery"
-  default_prompt: "Use $feishu-automation to guide me interactively through Feishu setup by opening the official pages, or help me work with documents and webhook notifications."
+  short_description: "Automate Feishu docs, attachments, and final-reply alerts"
+  default_prompt: "Use $feishu-automation to guide me interactively through Feishu setup by opening the official pages, work with documents and attachments, or forward each completed Codex turn's final reply through a Feishu Webhook."
 
 policy:
   allow_implicit_invocation: true

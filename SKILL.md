@@ -1,6 +1,6 @@
 ---
 name: feishu-automation
-description: Use when doing first-time Feishu setup, explaining or creating an enterprise custom app or group Webhook, configuring Feishu Open Platform for Codex, working with Feishu Wiki/DocX documents or attachments, or sending proactive group notifications.
+description: Use when doing first-time Feishu setup for an enterprise custom app, configuring Feishu Open Platform for Codex, working with Feishu Wiki/DocX documents or attachments, sending group Webhooks, or forwarding completed Codex replies to Feishu.
 ---
 
 # Feishu Automation
@@ -14,6 +14,7 @@ Use the bundled MCP server for document operations and the custom-bot webhook fo
 - Create, read, or edit a document: use the `feishu_automation` MCP tools. Read before changing existing content.
 - Upload or download a document attachment: use the attachment MCP tools; downloads default to `~/Documents/Feishu`.
 - Push a fixed-group notification: use `send_feishu_webhook` or `scripts/send_webhook.py`.
+- Forward every completed Codex turn's final reply: read and follow `references/codex-final-reply-notify.md`.
 - Publish a Markdown daily report: read `references/daily-ai-report.md` and use `scripts/publish_daily_report.py`.
 
 ## Guided first-time setup
@@ -38,10 +39,11 @@ Resolve all `scripts/...` and `references/...` paths relative to this Skill dire
 
 1. For a new document, call `create_feishu_document` with a title, optional Markdown, and optional application-owned folder token.
 2. For an existing document, call `read_feishu_document`; call `read_feishu_blocks` when block IDs or rich structure matter.
-3. Prefer `append_feishu_markdown` for additions.
-4. Use `update_feishu_text_block` only with the exact text returned by the last read.
-5. Use `replace_feishu_document` only after confirming the document ID and revision from the last read.
-6. List attachments before downloading. Do not overwrite an existing local file unless explicitly requested.
+3. Before changing an existing user-owned document, tell the user to add the enterprise application as a collaborator with **可编辑**, not **可阅读**, access. The application must have both the API scope and document-level edit permission. Do not attempt a write until the user confirms; read-only access is insufficient. For a folder or group-based grant, the application must inherit equivalent edit access.
+4. Prefer `append_feishu_markdown` for additions.
+5. Use `update_feishu_text_block` only with the exact text returned by the last read.
+6. Use `replace_feishu_document` only after confirming the document ID and revision from the last read.
+7. List attachments before downloading. Do not overwrite an existing local file unless explicitly requested.
 
 ## Notification workflow
 
@@ -55,6 +57,8 @@ python scripts/send_webhook.py --title "AI Daily" --message "Three highlights" -
 ```
 
 Run with `--dry-run` before changing a message template. Do not send test messages unless the user authorizes external delivery.
+
+For automatic delivery after each completed Codex turn, use `scripts/codex_notify_feishu.py` through the user-level Codex `notify` setting. It forwards only `last-assistant-message` from `agent-turn-complete`, not user prompts or intermediary progress. Preserve any previous notifier as described in `references/codex-final-reply-notify.md`.
 
 ## Configuration rules
 

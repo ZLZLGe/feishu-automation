@@ -13,6 +13,8 @@
 - `update_feishu_text_block`: update one text block after exact-text comparison.
 - `replace_feishu_document`: replace the body after document-ID and revision confirmation.
 
+Before using a write tool on an existing user-owned document, confirm that the enterprise application is a collaborator with **可编辑** permission. **可阅读** permission supports reads only. API scopes and document-level collaborator permissions are separate requirements.
+
 ## Attachments
 
 - `list_feishu_attachments`: list embedded file blocks and tokens.

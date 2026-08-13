@@ -68,6 +68,8 @@ Permission labels can differ between console versions. Search by scope identifie
 
 Wait until the user confirms the selected permissions are enabled.
 
+API Scope approval and access to a specific document are separate. Before the MCP edits an existing user-owned document, the Agent must tell the user to add the enterprise application as a collaborator with **可编辑** permission. **可阅读** permission permits reading only and is not sufficient for append, block update, or document replacement. Do not attempt the write until the user confirms the application has document-level edit access.
+
 ## 4. Complete Version Management & Release
 
 Open **应用发布 > 版本管理与发布** (Version Management & Release). Tell the user to create a version, include the newly requested scopes, submit it, and complete any administrator approval required by the organization.

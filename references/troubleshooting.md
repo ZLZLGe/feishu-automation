@@ -5,6 +5,8 @@
 - Check that the relevant scope is enabled.
 - Publish a new application version after changing scopes.
 - Confirm the document or folder is in the application's data-access scope.
+- For edits, add the enterprise application as a collaborator with **可编辑**, not **可阅读**, permission. If access is inherited through a group or folder, that grant must also be editable.
+- Feishu error `91403` commonly means the application identity lacks the target resource's required read or edit document permission. API Scope approval alone does not grant access to every existing document.
 - For downloads, also check the document setting that controls copying, printing, and downloading.
 
 ## Wiki link cannot be resolved

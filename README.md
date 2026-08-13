@@ -1,6 +1,6 @@
 # Feishu Automation
 
-让本地 Codex 通过 MCP 操作飞书文档、文件夹和附件，并通过飞书自定义机器人 Webhook 主动推送消息。
+让本地 Codex 通过 MCP 操作飞书文档、文件夹和附件，并通过飞书自定义机器人 Webhook 主动推送消息或自动转发每轮最终回复。
 
 仓库同时包含：
 
@@ -8,6 +8,7 @@
 - 本地 `feishu_automation` MCP Server。
 - 飞书企业自建应用配置脚本。
 - 自定义机器人 Webhook 发送器。
+- Codex 每轮最终回复通知适配器。
 - “每日 AI 日报”完整示例。
 
 ## 功能
@@ -20,6 +21,7 @@
 | 文件夹 | 创建由飞书应用管理的云空间文件夹 |
 | 附件 | 列出、上传和下载文档附件 |
 | Webhook 通知 | 向自定义机器人所在群发送文本、摘要和文档链接 |
+| Codex 最终回复通知 | 每轮结束后只把最终回复自动转发到飞书，不发送用户问题或中间进度 |
 | 日报发布 | 将 Markdown 发布为 DocX，再把三条摘要和全文链接发到群里 |
 
 ## 工作方式
@@ -33,6 +35,10 @@ Codex
 日报或任务结果
   -> 飞书自定义机器人 Webhook
   -> 固定飞书群通知
+
+Codex agent-turn-complete 事件
+  -> codex_notify_feishu.py 提取最终回复
+  -> 飞书自定义机器人 Webhook
 ```
 
 企业应用的 `App ID`、`App Secret` 用于文档 API；自定义机器人的 `webhook_url` 只用于群消息推送，两者互不替代。
@@ -90,6 +96,8 @@ Windows PowerShell 可运行：
 - 需要访问 Wiki 时，开通知识空间节点读取权限
 
 权限名称和配置细节见 [`references/setup.md`](references/setup.md)。已有文档或文件夹还必须位于应用可访问的数据范围内。
+
+需要通过 MCP 修改已有文档时，还必须把飞书企业应用添加为该文档的协作者，并授予 **可编辑** 权限，不能只给 **可阅读**。开放平台中的 API Scope 和具体文档的协作者权限是两层独立授权；前者开通后，应用不会自动获得所有文档的编辑权。
 
 ## 安装（macOS/Linux）
 
@@ -178,6 +186,8 @@ codex mcp get feishu_automation
 ## 在 Codex 中使用
 
 可以直接描述任务，例如：
+
+修改已有文档前，Codex 应先提醒你确认企业应用在该文档上拥有 **可编辑** 权限；如果只有 **可阅读** 权限，MCP 只能读取，不能追加或修改内容。
 
 ```text
 使用 $feishu-automation 创建一篇名为“项目周报”的飞书文档，并写入这个 Markdown 文件。
@@ -285,6 +295,36 @@ Windows PowerShell：
 
 当前发送器支持 URL 型自定义机器人 Webhook，不支持时间戳/签名校验模式。如果机器人启用了关键词校验，消息中必须包含配置的关键词。
 
+## 每轮最终回复自动通知
+
+该功能通过 Codex 用户级 `notify` 配置调用 `scripts/codex_notify_feishu.py`。它只处理 `agent-turn-complete` 事件，只转发每轮结束后的最终回复 `last-assistant-message`；不会转发用户问题、工具调用或中间进度，也不需要常驻进程和轮询。
+
+让 Codex 自动配置时，可以直接输入：
+
+```text
+使用 $feishu-automation 配置每轮最终回复的飞书通知。保留我现有的 notify，不发送真实测试消息，先做 dry run。
+```
+
+没有旧通知器时，用户级 `~/.codex/config.toml` 的结构如下。实际配置时应使用当前仓库和 Python 的绝对路径：
+
+```toml
+notify = [
+  "/absolute/path/to/python",
+  "/absolute/path/to/feishu-automation/scripts/codex_notify_feishu.py",
+]
+```
+
+Codex 会在每轮结束时把事件 JSON 追加为最后一个参数。Webhook 仍从私密配置 `~/.config/codex/feishu-automation/config.json` 读取，不写入 `config.toml`；适配器不会创建本地通知日志。若已有通知器，Skill 会先备份配置，再通过 `--previous-notifier-json` 保留原通知链路。
+
+离线检查消息格式，不连接飞书：
+
+```bash
+.venv/bin/python scripts/codex_notify_feishu.py --dry-run \
+  '{"type":"agent-turn-complete","cwd":"/work/example","last-assistant-message":"示例最终回复"}'
+```
+
+完整配置流程和 Windows 示例见 [`references/codex-final-reply-notify.md`](references/codex-final-reply-notify.md)。发送真实测试通知前，Codex 必须先征得用户同意。
+
 ## 本地数据与密钥
 
 | 路径 | 内容 |
@@ -323,7 +363,7 @@ $Validator = Join-Path $HOME ".codex\skills\.system\skill-creator\scripts\quick_
 & .\.venv\Scripts\python.exe $Validator .
 ```
 
-当前测试覆盖配置文件权限、DocX 创建、文件夹、附件流程、文档权限、Webhook 载荷、日报组合流程和 MCP 工具清单。
+当前测试覆盖配置文件权限、DocX 创建、文件夹、附件流程、文档权限、Webhook 载荷、Codex 最终回复通知、日报组合流程和 MCP 工具清单。
 
 GitHub Actions 会在 Windows、macOS 和 Linux 上运行同一套测试。Windows Runner 还会真实验证配置文件的当前用户专用 ACL。
 
@@ -340,7 +380,10 @@ feishu-automation/
 ├── assets/config.example.json
 ├── examples/daily-ai-report/
 ├── references/
+│   ├── codex-final-reply-notify.md
+│   └── ...
 ├── scripts/
+│   ├── codex_notify_feishu.py
 │   ├── configure.py
 │   ├── feishu_mcp_server.py
 │   ├── open_setup.py
