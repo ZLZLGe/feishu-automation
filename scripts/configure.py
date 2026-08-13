@@ -45,16 +45,51 @@ def save_config(path: Path, config: dict[str, Any]) -> None:
 
 
 def validate_base_url(value: str) -> str:
-    url = value.strip().rstrip("/")
+    url = value.strip()
     parsed = urllib.parse.urlparse(url)
     hostname = (parsed.hostname or "").lower()
     if parsed.scheme != "https" or not hostname:
         raise ConfigureError("Feishu tenant URL must be HTTPS.")
+    if parsed.username is not None or parsed.password is not None:
+        raise ConfigureError("Feishu tenant URL must not contain credentials.")
+    try:
+        port = parsed.port
+    except ValueError as error:
+        raise ConfigureError("Feishu tenant URL contains an invalid port.") from error
+    if port not in (None, 443):
+        raise ConfigureError("Feishu tenant URL must use the default HTTPS port.")
+    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        raise ConfigureError("Feishu tenant URL must contain only its HTTPS origin.")
     if hostname != "feishu.cn" and hostname != "larksuite.com" and not hostname.endswith(
         (".feishu.cn", ".larksuite.com")
     ):
         raise ConfigureError("Feishu tenant URL must use feishu.cn or larksuite.com.")
-    return url
+    return f"https://{hostname}"
+
+
+def derive_base_url_from_document_url(value: str) -> str:
+    """Extract the tenant origin from a Feishu or Lark document URL."""
+    url = value.strip()
+    parsed = urllib.parse.urlparse(url)
+    if parsed.username is not None or parsed.password is not None:
+        raise ConfigureError("Feishu document URL must not contain credentials.")
+    segments = [segment for segment in parsed.path.split("/") if segment]
+    if not any(
+        resource in segments and segments.index(resource) + 1 < len(segments)
+        for resource in ("wiki", "docx")
+    ):
+        raise ConfigureError(
+            "Provide a complete Feishu Wiki or DocX URL containing /wiki/<token> "
+            "or /docx/<token>."
+        )
+    try:
+        port = parsed.port
+    except ValueError as error:
+        raise ConfigureError("Feishu document URL contains an invalid port.") from error
+    authority = parsed.hostname or ""
+    if port is not None:
+        authority = f"{authority}:{port}"
+    return validate_base_url(f"{parsed.scheme}://{authority}")
 
 
 def register_mcp(
@@ -102,18 +137,25 @@ def register_mcp(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app-id")
-    parser.add_argument("--webhook-url")
     parser.add_argument("--base-url")
     parser.add_argument("--download-dir", default=str(DEFAULT_DOWNLOAD_DIR))
     parser.add_argument("--folder-token", default="")
     parser.add_argument("--skip-mcp", action="store_true")
     args = parser.parse_args()
     try:
-        app_id = (args.app_id or input("Feishu App ID: ")).strip()
+        app_id = input("Feishu App ID: ").strip()
         app_secret = getpass.getpass("Feishu App Secret: ").strip()
-        webhook_url = (args.webhook_url or getpass.getpass("Feishu Webhook URL: ")).strip()
-        base_url = (args.base_url or input("Feishu tenant URL (for example https://example.feishu.cn): ")).strip()
+        webhook_url = getpass.getpass("Feishu Webhook URL: ").strip()
+        document_url = ""
+        if not args.base_url:
+            document_url = input(
+                "Any Feishu document URL from this organization: "
+            ).strip()
+        base_url = (
+            validate_base_url(args.base_url)
+            if args.base_url
+            else derive_base_url_from_document_url(document_url)
+        )
         if not app_id or not app_secret:
             raise ConfigureError("App ID and App Secret are required.")
         from send_webhook import validate_webhook_url
@@ -122,7 +164,7 @@ def main() -> int:
             "app_id": app_id,
             "app_secret": app_secret,
             "webhook_url": validate_webhook_url(webhook_url),
-            "base_url": validate_base_url(base_url),
+            "base_url": base_url,
             "default_folder_token": args.folder_token.strip(),
             "download_dir": str(Path(args.download_dir).expanduser().resolve()),
         }

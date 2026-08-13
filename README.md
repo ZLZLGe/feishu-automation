@@ -52,9 +52,10 @@ Codex 应当先解释“企业自建应用”和“自定义机器人 Webhook”
 3. 在 **权限管理** 开通文档、文件夹、附件和分享相关权限。
 4. 在 **版本管理与发布** 创建并发布新版本，使权限生效。
 5. 在目标群的 **设置 > 群机器人 > 添加机器人 > 自定义机器人** 创建 Webhook。
-6. 最后在本地终端运行配置脚本，隐藏输入密钥并注册 MCP。
+6. 提供任意一条本组织的飞书文档链接，由 Codex 自动识别组织域名。
+7. 由 Codex 自己运行配置脚本、保存私密配置并注册 MCP，无需用户操作终端。
 
-不要把 App Secret 或完整 Webhook URL 发到聊天里，也不要把它们直接写在带参数的终端命令中。配置脚本会使用隐藏输入并保存到本机私密配置文件。
+用户提供 App Secret 和完整 Webhook URL 后，Codex 不应在回复中复述，也不能把它们写入命令行参数、日志或 Git。配置脚本通过交互输入接收这些值，并保存到本机私密配置文件。
 
 如果 Codex 无法控制浏览器，可从仓库根目录运行：
 
@@ -138,15 +139,15 @@ New-Item -ItemType Junction -Path $SkillPath -Target (Get-Location).Path
 (Get-Item $SkillPath).Target
 ```
 
-## 配置
+## 配置实现参考
 
-macOS/Linux：
+通常由 Skill 指挥 Codex 自动执行，不需要用户手动运行。macOS/Linux 使用：
 
 ```bash
 .venv/bin/python scripts/configure.py
 ```
 
-Windows PowerShell：
+Windows PowerShell 使用：
 
 ```powershell
 & .\.venv\Scripts\python.exe .\scripts\configure.py
@@ -157,7 +158,9 @@ Windows PowerShell：
 1. 飞书应用 `App ID`。
 2. 飞书应用 `App Secret`。
 3. 自定义机器人完整 Webhook URL。
-4. 飞书租户地址，例如 `https://example.feishu.cn`。
+4. 任意一条本组织的飞书文档链接，例如 `https://example.feishu.cn/wiki/...`。
+
+脚本会从文档链接自动提取 `https://example.feishu.cn`，不要求用户理解或单独填写“租户地址”。
 
 配置脚本会：
 

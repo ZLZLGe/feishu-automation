@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import stat
@@ -139,7 +141,7 @@ class SetupOpenerTests(unittest.TestCase):
 
 
 class SkillGuidanceTests(unittest.TestCase):
-    def test_first_time_setup_is_interactive_and_secret_safe(self) -> None:
+    def test_first_time_setup_is_agent_driven(self) -> None:
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
         frontmatter = skill.split("---", 2)[1]
         self.assertIn("first-time Feishu setup", frontmatter)
@@ -151,7 +153,12 @@ class SkillGuidanceTests(unittest.TestCase):
             "scripts/open_setup.py developer-console",
             "App Secret",
             "Webhook URL",
-            "never ask the user to paste",
+            "Feishu document URL",
+            "run the configurator itself",
+            "Do not ask the user to run",
+            "interactive PTY",
+            "environment variables",
+            "here-documents",
             "Wait for the user",
             "relative to this Skill directory",
         )
@@ -165,7 +172,8 @@ class SkillGuidanceTests(unittest.TestCase):
             "让 Codex 引导配置",
             "创建企业自建应用",
             "python scripts/open_setup.py developer-console",
-            "不要把 App Secret 或完整 Webhook URL 发到聊天里",
+            "由 Codex 自己运行配置脚本",
+            "任意一条本组织的飞书文档链接",
         ):
             self.assertIn(instruction, readme)
         for instruction in (
@@ -175,6 +183,8 @@ class SkillGuidanceTests(unittest.TestCase):
             "Permissions & Scopes",
             "Version Management & Release",
             "Group Bots",
+            "derive the tenant base URL",
+            "Agent runs the configurator",
         ):
             self.assertIn(instruction, setup)
 
@@ -378,8 +388,98 @@ class ConfigureTests(unittest.TestCase):
             self.configure.validate_base_url("https://example.feishu.cn/"),
             "https://example.feishu.cn",
         )
+        self.assertEqual(
+            self.configure.validate_base_url("https://EXAMPLE.FEISHU.CN:443"),
+            "https://example.feishu.cn",
+        )
+        for value in (
+            "https://example.com",
+            "https://user:password@example.feishu.cn",
+            "https://example.feishu.cn:8443",
+            "https://example.feishu.cn/wiki/ExampleToken",
+            "https://example.feishu.cn?source=test",
+            "https://example.feishu.cn#fragment",
+        ):
+            with self.subTest(value=value):
+                with self.assertRaises(self.configure.ConfigureError):
+                    self.configure.validate_base_url(value)
+
+    def test_derives_tenant_base_url_from_document_url(self) -> None:
+        self.assertEqual(
+            self.configure.derive_base_url_from_document_url(
+                "https://aicarrier.feishu.cn/wiki/ELmWwUe6PiP7jzkXnrxccQXLnLg?from=copylink"
+            ),
+            "https://aicarrier.feishu.cn",
+        )
+        self.assertEqual(
+            self.configure.derive_base_url_from_document_url(
+                "https://example.larksuite.com/docx/AbCdEf123"
+            ),
+            "https://example.larksuite.com",
+        )
+
+    def test_document_url_must_include_a_resource_path(self) -> None:
         with self.assertRaises(self.configure.ConfigureError):
-            self.configure.validate_base_url("https://example.com")
+            self.configure.derive_base_url_from_document_url(
+                "https://aicarrier.feishu.cn"
+            )
+        with self.assertRaises(self.configure.ConfigureError):
+            self.configure.derive_base_url_from_document_url(
+                "https://example.com/docx/AbCdEf123"
+            )
+        with self.assertRaises(self.configure.ConfigureError):
+            self.configure.derive_base_url_from_document_url(
+                "https://user:password@aicarrier.feishu.cn/wiki/ExampleToken"
+            )
+        with self.assertRaises(self.configure.ConfigureError):
+            self.configure.derive_base_url_from_document_url(
+                "https://aicarrier.feishu.cn:8443/wiki/ExampleToken"
+            )
+
+    def test_webhook_cannot_be_supplied_as_a_command_argument(self) -> None:
+        source = (ROOT / "scripts" / "configure.py").read_text(encoding="utf-8")
+        self.assertNotIn('parser.add_argument("--webhook-url")', source)
+
+    def test_interactive_config_derives_base_url_from_document_link(self) -> None:
+        saved: dict[str, object] = {}
+
+        def capture_config(_path: Path, config: dict[str, object]) -> None:
+            saved.update(config)
+
+        with tempfile.TemporaryDirectory() as directory:
+            argv = [
+                "configure.py",
+                "--download-dir",
+                directory,
+                "--skip-mcp",
+            ]
+            output = io.StringIO()
+            errors = io.StringIO()
+            with (
+                patch.object(sys, "argv", argv),
+                patch("builtins.input", side_effect=[
+                    "cli_example",
+                    "https://aicarrier.feishu.cn/wiki/ExampleToken",
+                ]),
+                patch.object(
+                    self.configure.getpass,
+                    "getpass",
+                    side_effect=[
+                        "app-secret",
+                        "https://open.feishu.cn/open-apis/bot/v2/hook/example",
+                    ],
+                ),
+                patch.object(self.configure, "save_config", side_effect=capture_config),
+                contextlib.redirect_stdout(output),
+                contextlib.redirect_stderr(errors),
+            ):
+                self.assertEqual(self.configure.main(), 0)
+
+        self.assertEqual(saved["base_url"], "https://aicarrier.feishu.cn")
+        self.assertNotIn("document_url", saved)
+        transcript = output.getvalue() + errors.getvalue()
+        self.assertNotIn("app-secret", transcript)
+        self.assertNotIn("open-apis/bot/v2/hook/example", transcript)
 
     def test_registers_mcp_with_windows_virtualenv_python(self) -> None:
         register_mcp = getattr(self.configure, "register_mcp", None)
