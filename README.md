@@ -1,3 +1,19 @@
+> [!WARNING]
+> ## 本项目已停止维护
+>
+> 飞书官方现已发布并持续维护 [Lark/Feishu CLI](https://github.com/larksuite/cli)，已覆盖飞书文档、Wiki、云盘、附件、用户授权和 Agent Skills 等能力。
+>
+> 本仓库不再更新，也不建议用于新项目，仅保留作为历史参考。新项目请直接使用飞书官方 CLI。
+
+官方 CLI 快速开始：
+
+```bash
+npx @larksuite/cli@latest install
+lark-cli config init --new
+lark-cli auth login --recommend
+lark-cli auth status
+```
+
 # Feishu Automation
 
 让本地 Codex 通过 MCP 操作飞书文档、文件夹和附件，并通过飞书自定义机器人 Webhook 主动推送消息或自动转发每轮最终回复。
